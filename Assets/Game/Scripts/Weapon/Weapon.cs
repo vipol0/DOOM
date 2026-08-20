@@ -1,15 +1,18 @@
 ﻿using System.Collections;
 using UnityEngine;
+using System;
 
 public class Weapon : MonoBehaviour
 {
-    [SerializeField] private WeaponData weaponData;
+    [SerializeField] protected WeaponData weaponData;
+    [SerializeField] protected Animator animator;
 
     private int magazineSize;
     private int currentAmmo;
     private int reserveAmmo;
 
     private float shootRange;
+    private float shootCooldown;
     private float damage;
     private float reloadTime;
     private float throwForce;
@@ -23,12 +26,16 @@ public class Weapon : MonoBehaviour
 
     private bool isHeld;
     private bool isReloading;
+    private bool canShoot = true;
+
+    public event Action<int, int, int, bool> AmmoChanged;
 
     private void Awake()
     {
         currentAmmo = weaponData.StartingAmmo;
         magazineSize = weaponData.MagazineSize;
         shootRange = weaponData.ShootRange;
+        shootCooldown = weaponData.ShootCooldown;
         damage = weaponData.Damage;
         reloadTime = weaponData.ReloadTime;
         throwForce = weaponData.ThrowForce;
@@ -40,14 +47,29 @@ public class Weapon : MonoBehaviour
         playerCamera = Camera.main;
     }
 
-    public void OnShoot()
+    public virtual void OnShoot()
     {
-        if (isReloading || !isHeld) return;
+        if (isReloading || !isHeld || currentAmmo <= 0 || !canShoot) return;
+
+        canShoot = false;
+        currentAmmo--;
+        
+        AmmoChanged?.Invoke(currentAmmo, magazineSize, reserveAmmo, isReloading);
+        
+        animator.SetTrigger("Shoot");
 
         var ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
 
         if (Physics.Raycast(ray, out var hit, shootRange, mask))
             hit.collider.gameObject.GetComponent<IDamagable>()?.TakeDamage(damage);
+        
+        StartCoroutine(ShootCooldown());
+    }
+
+    private IEnumerator ShootCooldown()
+    {
+        yield return new WaitForSeconds(shootCooldown);
+        canShoot =  true;
     }
 
     public void OnReload()
@@ -61,6 +83,7 @@ public class Weapon : MonoBehaviour
     private IEnumerator Reloading()
     {
         isReloading = true;
+        AmmoChanged?.Invoke(currentAmmo, magazineSize, reserveAmmo, isReloading);
 
         yield return new WaitForSeconds(reloadTime);
 
@@ -71,11 +94,13 @@ public class Weapon : MonoBehaviour
         reserveAmmo -= ammoToReload;
 
         isReloading = false;
+        AmmoChanged?.Invoke(currentAmmo, magazineSize, reserveAmmo, isReloading);
     }
 
     public void GetAmmo(int newAmmo)
     {
         reserveAmmo = newAmmo;
+        AmmoChanged?.Invoke(currentAmmo, magazineSize, reserveAmmo, isReloading);
     }
 
     public void OnGetWeapon(Transform weaponHolder)
@@ -87,6 +112,7 @@ public class Weapon : MonoBehaviour
         }
         
         isHeld = true;
+        AmmoChanged?.Invoke(currentAmmo, magazineSize, reserveAmmo, isReloading);
 
         transform.SetParent(weaponHolder);
         transform.localPosition = Vector3.zero;
@@ -94,6 +120,7 @@ public class Weapon : MonoBehaviour
 
         weaponRigidBody.isKinematic = true;
         weaponCollider.enabled = false;
+        animator.SetBool("IsHeld", isHeld);
     }
 
     public void OnDropWeapon()
@@ -105,12 +132,13 @@ public class Weapon : MonoBehaviour
         }
         
         isHeld = false;
+        animator.SetBool("IsHeld", isHeld);
 
         transform.SetParent(null);
+        transform.rotation = Quaternion.identity;
 
         weaponRigidBody.isKinematic = false;
         weaponCollider.enabled = true;
-
         weaponRigidBody.AddForce(playerCamera.transform.forward * throwForce, ForceMode.Impulse);
     }
 }

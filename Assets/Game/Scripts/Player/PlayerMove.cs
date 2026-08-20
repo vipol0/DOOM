@@ -49,9 +49,13 @@ public class PlayerMove : MonoBehaviour
 
     private void Update()
     {
-        PlayerVelocityChanged?.Invoke(ch.velocity.magnitude);
+        if (isDashing || ch == null || groundCheck == null)
+        {
+            Debug.LogWarning("PlayerMove can only be done once");
+            return;
+        }
         
-        if (isDashing || ch == null || groundCheck == null) return;
+        PlayerVelocityChanged?.Invoke(ch.velocity.magnitude);
 
         isGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
         if (isGrounded && verticalVelocity.y < 0) verticalVelocity.y = -2f;
