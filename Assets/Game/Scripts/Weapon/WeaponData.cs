@@ -11,6 +11,7 @@ public class WeaponData : ScriptableObject
     [SerializeField] private float throwForce = 25;
     [SerializeField] private float reloadTime = 2.5f;
     [SerializeField] private LayerMask mask;
+    [SerializeField] private WeaponType weaponType;
 
     public float Damage => damage;
     public int MagazineSize => magazineSize;
@@ -20,4 +21,5 @@ public class WeaponData : ScriptableObject
     public float ThrowForce => throwForce;
     public float ReloadTime => reloadTime;
     public LayerMask Mask => mask;
+    public WeaponType WeaponType => weaponType;
 }

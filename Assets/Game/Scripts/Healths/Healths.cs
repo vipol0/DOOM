@@ -4,9 +4,11 @@ using System;
 
 public class Health : MonoBehaviour, IDamagable
 {
-    [Header("Health Settings")]
+    [Header("Healths Settings")]
     [SerializeField] private float maxHealth = 100f;
+    [SerializeField] private bool isDead = true;
 #if UNITY_EDITOR
+    [Header("Debug")]
     [SerializeField] private float currentHealthDebug;
 #endif
     private float currentHealth;
@@ -43,10 +45,12 @@ public class Health : MonoBehaviour, IDamagable
 
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
 
-        // if (currentHealth <= 0)
-        // {
-        //     Die();
-        // }
+        if (currentHealth <= 0)
+        {
+            if (isDead) Died();
+            
+            // Die();
+        }
     }
     
     public void Heal(float amount)
@@ -57,6 +61,11 @@ public class Health : MonoBehaviour, IDamagable
         currentHealth = Mathf.Clamp(currentHealth, 0f, maxHealth);
 
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
+    }
+
+    private void Died()
+    {
+        Destroy(gameObject);
     }
 
     // private void Die()

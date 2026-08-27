@@ -1,10 +1,11 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 
-public class CameraJuice : MonoBehaviour
+public class CameraJuice : BaseMonoBehaviour
 {
     [Header("References")]
     [SerializeField] private PlayerMove player;
-    [SerializeField] private Camera cam;
+    [SerializeField] private List<Camera> cameras = new();
 
     [Header("Head Bobbing")]
     [SerializeField] private float bobFrequency = 10f;
@@ -22,11 +23,15 @@ public class CameraJuice : MonoBehaviour
 
     private float timer;
     private Vector3 initialLocalPos;
+    private Quaternion initialLocalRot;
 
     private void Start()
     {
-        if (cam == null) cam = GetComponent<Camera>();
         initialLocalPos = transform.localPosition;
+        initialLocalRot = transform.localRotation;
+
+        ValidateReference(player, nameof(player));
+        foreach (var cam in cameras) ValidateReference(cam, nameof(cam));
     }
 
     private void Update()
@@ -40,39 +45,45 @@ public class CameraJuice : MonoBehaviour
 
     private void HandleHeadBob()
     {
-        if (player.IsGrounded && player.CurrentMoveInput.sqrMagnitude > 0.1f && !player.IsDashing)
-        {
-            float currentSpeedMultiplier = player.IsSprinting ? 1.4f : 1f;
-            timer += Time.deltaTime * bobFrequency * currentSpeedMultiplier;
+        bool isMoving = player.IsGrounded && player.CurrentMoveInput.sqrMagnitude > 0.1f && !player.IsDashing;
 
-            float newX = initialLocalPos.x + Mathf.Cos(timer / 2) * bobHorizontalAmplitude;
-            float newY = initialLocalPos.y + Mathf.Sin(timer) * bobVerticalAmplitude;
+        if (isMoving)
+        {
+            var speedMultiplier = player.IsSprinting ? 1.4f : 1f;
+            timer += Time.deltaTime * bobFrequency * speedMultiplier;
+            
+            if (timer > Mathf.PI * 4f) timer -= Mathf.PI * 4f;
+
+            var newX = initialLocalPos.x + Mathf.Cos(timer * 0.5f) * bobHorizontalAmplitude;
+            var newY = initialLocalPos.y + Mathf.Sin(timer) * bobVerticalAmplitude;
 
             transform.localPosition = new Vector3(newX, newY, initialLocalPos.z);
         }
         else
         {
-            timer = 0f;
-            transform.localPosition = Vector3.Lerp(transform.localPosition, initialLocalPos, Time.deltaTime * bobFrequency);
+            var blendSpeed = 1f - Mathf.Exp(-bobFrequency * Time.deltaTime);
+            transform.localPosition = Vector3.Lerp(transform.localPosition, initialLocalPos, blendSpeed);
         }
     }
 
     private void HandleTilt()
     {
         float targetTilt = -player.HorizontalInput * tiltAngle;
-        
-        Quaternion targetRotation = Quaternion.Euler(
-            transform.localRotation.eulerAngles.x,
-            transform.localRotation.eulerAngles.y,
-            targetTilt
-        );
+        Quaternion targetRotation = initialLocalRot * Quaternion.Euler(0f, 0f, targetTilt);
 
-        transform.localRotation = Quaternion.Slerp(transform.localRotation, targetRotation, Time.deltaTime * tiltSpeed);
+        float blendSpeed = 1f - Mathf.Exp(-tiltSpeed * Time.deltaTime);
+        transform.localRotation = Quaternion.Slerp(transform.localRotation, targetRotation, blendSpeed);
     }
 
     private void HandleFOV()
     {
         float targetFOV = player.IsDashing ? dashFOV : normalFOV;
-        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovSpeed);
+        float blendSpeed = 1f - Mathf.Exp(-fovSpeed * Time.deltaTime);
+
+        foreach (var cam in cameras)
+        {
+            if (cam == null) continue;
+            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, blendSpeed);
+        }
     }
 }

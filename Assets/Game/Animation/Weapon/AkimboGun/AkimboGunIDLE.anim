@@ -23,7 +23,7 @@ AnimationClip:
     - time: 0
       value: {fileID: 21300000, guid: 3449e48303aae264db96eaab005bfbab, type: 3}
     attribute: m_Sprite
-    path: 
+    path: AkimboGunMesh
     classID: 212
     script: {fileID: 0}
     flags: 2
@@ -35,7 +35,7 @@ AnimationClip:
   m_ClipBindingConstant:
     genericBindings:
     - serializedVersion: 2
-      path: 0
+      path: 3727273535
       attribute: 0
       script: {fileID: 0}
       typeID: 212
