@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.AI;
 
-public class EnemyMove : MonoBehaviour
+public class EnemyMove : BaseMonoBehaviour
 {
     [SerializeField] private Transform player;
     private NavMeshAgent agent;
@@ -9,6 +9,8 @@ public class EnemyMove : MonoBehaviour
     private void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
+        if (player == null) player = GameObject.FindGameObjectWithTag("Player").transform;
+        ValidateReference(player, nameof(player));
     }
 
     private void Update()

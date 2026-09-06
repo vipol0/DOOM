@@ -52,7 +52,12 @@ public class Weapon : BaseMonoBehaviour
 
     public virtual void OnShoot()
     {
-        if (isReloading || !isHeld || currentAmmo <= 0 || !canShoot || playerCamera == null) return;
+        if (isReloading || !isHeld || !canShoot || playerCamera == null) return;
+        if (currentAmmo <= 0)
+        {
+            OnReload();
+            return;
+        } 
 
         canShoot = false;
         currentAmmo--;
@@ -64,8 +69,10 @@ public class Weapon : BaseMonoBehaviour
         var ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
 
         if (Physics.Raycast(ray, out var hit, weaponData.ShootRange, weaponData.Mask))
+        {
             if (hit.collider.TryGetComponent<IDamagable>(out var damagable))
                 damagable.TakeDamage(weaponData.Damage);
+        }
 
         StartCoroutine(ShootCooldown());
     }

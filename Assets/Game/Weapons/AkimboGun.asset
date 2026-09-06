@@ -21,4 +21,5 @@ MonoBehaviour:
   reloadTime: 2.5
   mask:
     serializedVersion: 2
-    m_Bits: 129
+    m_Bits: 1153
+  weaponType: 0

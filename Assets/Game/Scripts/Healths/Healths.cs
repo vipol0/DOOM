@@ -1,75 +1,61 @@
-﻿using UnityEngine;
-// using UnityEngine.Events;
-using System;
+﻿using System;
+using UnityEngine;
 
-public class Health : MonoBehaviour, IDamagable
+public abstract class Health : MonoBehaviour, IDamagable
 {
-    [Header("Healths Settings")]
-    [SerializeField] private float maxHealth = 100f;
+    [Header("Healths Settings")] [SerializeField]
+    private float maxHealth = 100f;
     [SerializeField] private bool isDead = true;
+    
 #if UNITY_EDITOR
-    [Header("Debug")]
-    [SerializeField] private float currentHealthDebug;
+    [Header("Debug")] [SerializeField] private float currentHealthDebug;
 #endif
-    private float currentHealth;
-
-    // [Header("Events")]
-    // [SerializeField] private UnityEvent OnDeath;
     public event Action<float, float> OnHealthChanged;
-    public float CurrentHealth => currentHealth;
+    public float CurrentHealth { get; private set; }
+
     public float MaxHealth => maxHealth;
 
     private void Awake()
     {
-        currentHealth = maxHealth;
+        CurrentHealth = maxHealth;
     }
 
     private void Start()
     {
-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+        OnHealthChanged?.Invoke(CurrentHealth, maxHealth);
     }
 
 #if UNITY_EDITOR
     private void Update()
     {
-        currentHealthDebug = currentHealth;
+        currentHealthDebug = CurrentHealth;
     }
 #endif
 
     public void TakeDamage(float amount)
     {
-        if (amount <= 0 || currentHealth <= 0) return;
+        if (amount <= 0 || CurrentHealth <= 0) return;
 
-        currentHealth -= amount;
-        currentHealth = Mathf.Clamp(currentHealth, 0f, maxHealth);
+        CurrentHealth -= amount;
+        CurrentHealth = Mathf.Clamp(CurrentHealth, 0f, maxHealth);
 
-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+        OnHealthChanged?.Invoke(CurrentHealth, maxHealth);
 
-        if (currentHealth <= 0)
-        {
-            if (isDead) Died();
-            
-            // Die();
-        }
+        if (CurrentHealth <= 0 && isDead) Died();
     }
-    
+
     public void Heal(float amount)
     {
-        if (amount <= 0 || currentHealth <= 0 || currentHealth >= maxHealth) return;
+        if (amount <= 0 || CurrentHealth <= 0 || CurrentHealth >= maxHealth) return;
 
-        currentHealth += amount;
-        currentHealth = Mathf.Clamp(currentHealth, 0f, maxHealth);
+        CurrentHealth += amount;
+        CurrentHealth = Mathf.Clamp(CurrentHealth, 0f, maxHealth);
 
-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+        OnHealthChanged?.Invoke(CurrentHealth, maxHealth);
     }
 
-    private void Died()
+    protected virtual void Died()
     {
         Destroy(gameObject);
     }
-
-    // private void Die()
-    // {
-    //     OnDeath?.Invoke();
-    // }
 }

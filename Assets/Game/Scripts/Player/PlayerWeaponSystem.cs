@@ -52,7 +52,7 @@ public class PlayerWeaponSystem : MonoBehaviour
 
     public int GetAmmo(WeaponType type)
     {
-        return ammoInventory.TryGetValue(type, out var amount) ? amount : 0;
+        return ammoInventory.GetValueOrDefault(type);
     }
 
     public void SetAmmo(WeaponType type, int amount)
