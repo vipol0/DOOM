@@ -218,7 +218,7 @@ MonoBehaviour:
   accelSmoothing: 5
   obstacleMask:
     serializedVersion: 2
-    m_Bits: 1
+    m_Bits: 2177
   obstacleCheckDistance: 3
   avoidanceForce: 6
   agentRadius: 1.2
@@ -247,5 +247,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c2a4618655646cab4679f65867d4052, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyBaseAttack
-  damage: 20
+  damage: 10
   enemyHealth: {fileID: 3204579459531066718}
