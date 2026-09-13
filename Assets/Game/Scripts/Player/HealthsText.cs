@@ -1,7 +1,7 @@
 ﻿using TMPro;
 using UnityEngine;
 
-public class HealthsText : MonoBehaviour
+public class HealthsText : BaseText
 {
     [SerializeField] private Health health;
     [SerializeField] private TextMeshProUGUI text;
@@ -13,22 +13,20 @@ public class HealthsText : MonoBehaviour
 
     private void OnEnable()
     {
+        if (health == null) return;
         health.OnHealthChanged += UpdateText;
     }
 
     private void OnDisable()
     {
+        if (health == null) return;
         health.OnHealthChanged -= UpdateText;
     }
 
     private void UpdateText(float currentHealth, float maxHealth)
     {
-        if (text == null)
-        {
-            Debug.LogWarning($"[{name}] has no {nameof(Health)} set");
-            return;
-        }
+        if (text == null) return;
 
-        text.text = "Healths: " + currentHealth + "/" + maxHealth;
+        text.SetText($"{currentHealth}");
     }
 }

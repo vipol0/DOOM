@@ -1,16 +1,16 @@
 ﻿public class EnemyHealth : Health
 {
-    private EnemySpawn enemySpawn;
+    private WaveManager waveManager;
 
-    public void GetEnemySpawn(EnemySpawn newEnemySpawn)
+    public void GetEnemySpawn(WaveManager newWaveManager)
     {
-        if (newEnemySpawn != null)
-            enemySpawn = newEnemySpawn;
+        if (newWaveManager != null)
+            waveManager = newWaveManager;
     }
 
     protected override void Died()
     {
-        if (enemySpawn != null) enemySpawn.EnemyKilled(); 
+        if (ValidateReference(waveManager, nameof(waveManager))) waveManager.EnemyKilled(gameObject); 
         base.Died();
     }
 }

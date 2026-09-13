@@ -2,13 +2,16 @@
 
 public class FlyingEnemyChaser : BaseMonoBehaviour
 {
-    [Header("Target")] [SerializeField] private Transform target;
+    [Header("Target")] 
+    [SerializeField] private Transform target;
     [SerializeField] private string playerTag = "Player";
 
-    [Header("Move")] [SerializeField] private float moveSpeed = 6f;
+    [Header("Move")] 
+    [SerializeField] private float moveSpeed = 6f;
     [SerializeField] private float accelSmoothing = 5f;
 
-    [Header("Obstacle")] [SerializeField] private LayerMask obstacleMask;
+    [Header("Obstacle")] 
+    [SerializeField] private LayerMask obstacleMask;
     [SerializeField] private float obstacleCheckDistance = 3f;
     [SerializeField] private float avoidanceForce = 6f;
     [SerializeField] private float agentRadius = 0.5f;
@@ -50,11 +53,11 @@ public class FlyingEnemyChaser : BaseMonoBehaviour
         if (moveDirection.sqrMagnitude < 0.001f)
             return Vector3.zero;
 
+        // Мягкое уклонение: стараемся отвернуть от препятствия заранее
         if (Physics.SphereCast(transform.position, agentRadius, moveDirection, out var hit, obstacleCheckDistance,
                 obstacleMask))
         {
             var slideDirection = Vector3.ProjectOnPlane(moveDirection, hit.normal).normalized;
-
             var closeness = 1f - Mathf.Clamp01(hit.distance / obstacleCheckDistance);
             var pushAway = hit.normal * closeness * avoidanceForce;
 
@@ -71,10 +74,31 @@ public class FlyingEnemyChaser : BaseMonoBehaviour
         var targetVelocity = direction * moveSpeed;
         currentVelocity = Vector3.Lerp(currentVelocity, targetVelocity, Time.deltaTime * accelSmoothing);
 
+        Vector3 movement = currentVelocity * Time.deltaTime;
+        float moveDistance = movement.magnitude;
+
+        if (moveDistance > 0.0001f)
+        {
+            // Игнорируем триггеры при проверке
+            if (Physics.SphereCast(transform.position, agentRadius, movement.normalized, out var hit, moveDistance, obstacleMask, QueryTriggerInteraction.Ignore))
+            {
+                // Проверяем, что мы не попали в свой собственный коллайдер
+                if (hit.transform != transform)
+                {
+                    float safeDistance = Mathf.Max(0f, hit.distance - 0.01f);
+                    Vector3 safeMove = movement.normalized * safeDistance;
+                    Vector3 slideMove = Vector3.ProjectOnPlane(movement - safeMove, hit.normal);
+                
+                    movement = safeMove + slideMove;
+                    currentVelocity = Vector3.ProjectOnPlane(currentVelocity, hit.normal);
+                }
+            }
+        }
+
         if (rb != null)
-            rb.MovePosition(transform.position + currentVelocity * Time.deltaTime);
+            rb.MovePosition(transform.position + movement);
         else
-            transform.position += currentVelocity * Time.deltaTime;
+            transform.position += movement;
     }
 
     private void OnDrawGizmosSelected()

@@ -1,113 +1,243 @@
+using System;
 using System.Collections;
 using UnityEngine;
-using System;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMove : MonoBehaviour
 {
-    [Header("Movement")]
-    [SerializeField] private float moveSpeed = 3.5f;
-    [SerializeField] private float runSpeed = 6f;
+    [Header("Movement")] 
+    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float runSpeed = 8.5f;
+    [SerializeField] private float acceleration = 80f;
+    [SerializeField] private float deceleration = 70f;
 
-    private float currentSpeed;
-    private float x;
-    private float z;
+    [Header("Parkour Air Control (WASD)")] 
+    [SerializeField] private float airControl = 14f;
+    [SerializeField] private float jumpCutoff = 0.5f;
 
-    [Header("Dash")]
+    [Header("Dash")] 
     [SerializeField] private Transform cameraTransform;
-    [SerializeField] private float dashSpeed = 20f;
-    [SerializeField] private float dashTime = 0.2f;
-    [SerializeField] private float dashCooldown = 1f;
+    [SerializeField] private float dashSpeed = 28f;
+    [SerializeField] private float dashTime = 0.15f;
+    [SerializeField] private float dashCooldown = 0.7f;
 
-    private bool isDashing;
-    private bool canDash = true;
-
-    [Header("Gravity")]
-    [SerializeField] private float gravity = -19.62f;
-    [SerializeField] private float jumpHeight = 1.2f;
+    [Header("Gravity & Jump")] 
+    [SerializeField] private float gravity = -28f;
+    [SerializeField] private float jumpHeight = 2f;
     [SerializeField] private Transform groundCheck;
-    [SerializeField] private float groundDistance = 0.4f;
+    [SerializeField] private float groundDistance = 0.3f;
     [SerializeField] private LayerMask groundMask;
+
+    [Header("Wall Jump & Slide")]
+    [SerializeField] private LayerMask wallMask;
+    [SerializeField] private float wallCheckDistance = 0.8f;
+    [SerializeField] private float wallSlideSpeed = 2.5f;
+    [SerializeField] private float wallJumpUpForce = 9f;
+    [SerializeField] private float wallJumpOffForce = 10f;
+
+    [Header("Assist / Coyote & Buffer")] 
+    [SerializeField] private float coyoteTime = 0.15f;
+    [SerializeField] private float jumpBufferTime = 0.15f;
 
     private CharacterController ch;
     private Vector3 verticalVelocity;
-    private bool isGrounded;
-    
-    public bool IsGrounded => isGrounded;
-    public bool IsDashing => isDashing;
+    private Vector3 horizontalVelocity;
+    private bool canDash = true;
+
+    private float coyoteTimer;
+    private float jumpBufferTimer;
+
+    // Переменные стены
+    private bool isTouchingWall;
+    private Vector3 wallNormal;
+    private bool hasWallJumped;
+
+    public bool IsGrounded { get; private set; }
+    public bool IsWallSliding { get; private set; }
+    public bool IsDashing { get; private set; }
     public bool IsSprinting { get; private set; }
-    public float HorizontalInput => x;
+    public float HorizontalInput { get; private set; }
     public Vector3 CurrentMoveInput { get; private set; }
-    
-    public event Action<float> PlayerVelocityChanged;
 
     private void Awake()
     {
         ch = GetComponent<CharacterController>();
-        currentSpeed = moveSpeed;
     }
 
     private void Update()
     {
-        if (isDashing || ch == null || groundCheck == null)
+        if (ch == null) return;
+
+        CheckGround();
+        CheckWall();
+        HandleInputs();
+
+        if (!IsDashing)
         {
-            Debug.LogWarning("PlayerMove can only be done once");
+            if (IsGrounded)
+                ApplyGroundMovement();
+            else
+                ApplyAirMovement();
+
+            ApplyWallSlide();
+            ApplyJumpAndGravity();
+
+            ch.Move((horizontalVelocity + verticalVelocity) * Time.deltaTime);
+        }
+    }
+
+    private void CheckGround()
+    {
+        IsGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
+
+        if (IsGrounded)
+        {
+            coyoteTimer = coyoteTime;
+            hasWallJumped = false; // Сброс прыжка от стены при касании земли
+
+            if (verticalVelocity.y < 0) verticalVelocity.y = -2f;
+        }
+        else
+        {
+            coyoteTimer -= Time.deltaTime;
+        }
+    }
+
+    private void CheckWall()
+    {
+        if (IsGrounded)
+        {
+            isTouchingWall = false;
+            IsWallSliding = false;
             return;
         }
-        
-        PlayerVelocityChanged?.Invoke(ch.velocity.magnitude);
 
-        isGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
-        if (isGrounded && verticalVelocity.y < 0) verticalVelocity.y = -2f;
+        // Проверка 4 направлений вокруг игрока на наличие стены
+        Vector3[] rayDirections = { transform.forward, transform.right, -transform.right, -transform.forward };
+        isTouchingWall = false;
 
-        x = Input.GetAxisRaw("Horizontal");
-        z = Input.GetAxisRaw("Vertical");
+        foreach (var dir in rayDirections)
+        {
+            if (Physics.Raycast(transform.position, dir, out RaycastHit hit, wallCheckDistance, wallMask))
+            {
+                isTouchingWall = true;
+                wallNormal = hit.normal;
+                break;
+            }
+        }
+
+        // Скольжение активируется, если соприкасаемся со стеной и падаем вниз
+        IsWallSliding = isTouchingWall && verticalVelocity.y < 0f;
+    }
+
+    private void HandleInputs()
+    {
+        HorizontalInput = Input.GetAxisRaw("Horizontal");
+        var verticalInput = Input.GetAxisRaw("Vertical");
 
         IsSprinting = Input.GetKey(KeyCode.LeftShift);
-        currentSpeed = IsSprinting ? runSpeed : moveSpeed;
 
-        CurrentMoveInput = (transform.right * x + transform.forward * z).normalized;
+        CurrentMoveInput = (transform.right * HorizontalInput + transform.forward * verticalInput).normalized;
 
-        if (Input.GetButtonDown("Jump") && isGrounded) verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        if (Input.GetButtonDown("Jump"))
+            jumpBufferTimer = jumpBufferTime;
+        else
+            jumpBufferTimer -= Time.deltaTime;
 
-        if (Input.GetKeyDown(KeyCode.LeftControl) && canDash)
+        if (Input.GetButtonUp("Jump") && verticalVelocity.y > 0f) verticalVelocity.y *= jumpCutoff;
+
+        if (Input.GetKeyDown(KeyCode.LeftControl) && canDash) StartCoroutine(PerformDash());
+    }
+
+    private void ApplyGroundMovement()
+    {
+        var targetSpeed = IsSprinting ? runSpeed : moveSpeed;
+        var targetVelocity = CurrentMoveInput * targetSpeed;
+
+        var rate = CurrentMoveInput.sqrMagnitude > 0.01f ? acceleration : deceleration;
+        horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, targetVelocity, rate * Time.deltaTime);
+    }
+
+    private void ApplyAirMovement()
+    {
+        var targetSpeed = IsSprinting ? runSpeed : moveSpeed;
+
+        if (CurrentMoveInput.sqrMagnitude > 0.01f)
         {
-            StartCoroutine(PerformDash(CurrentMoveInput));
-            return;
+            var currentMaxSpeed = Mathf.Max(horizontalVelocity.magnitude, targetSpeed);
+            var targetAirVelocity = CurrentMoveInput * currentMaxSpeed;
+
+            horizontalVelocity = Vector3.Lerp(horizontalVelocity, targetAirVelocity, airControl * Time.deltaTime);
+        }
+        else
+        {
+            horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, Vector3.zero, 2f * Time.deltaTime);
+        }
+    }
+
+    private void ApplyWallSlide()
+    {
+        // Ограничиваем скорость падения при скольжении
+        if (IsWallSliding && verticalVelocity.y < -wallSlideSpeed)
+        {
+            verticalVelocity.y = -wallSlideSpeed;
+        }
+    }
+
+    private void ApplyJumpAndGravity()
+    {
+        // Обычный прыжок от земли
+        if (jumpBufferTimer > 0f && coyoteTimer > 0f)
+        {
+            verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            jumpBufferTimer = 0f;
+            coyoteTimer = 0f;
+        }
+        // Прыжок от стены (только 1 раз до касания земли)
+        else if (jumpBufferTimer > 0f && isTouchingWall && !IsGrounded && !hasWallJumped)
+        {
+            verticalVelocity.y = wallJumpUpForce;
+            horizontalVelocity = wallNormal * wallJumpOffForce;
+
+            hasWallJumped = true;
+            jumpBufferTimer = 0f;
+            coyoteTimer = 0f;
         }
 
         verticalVelocity.y += gravity * Time.deltaTime;
-
-        var finalVelocity = CurrentMoveInput * currentSpeed + verticalVelocity;
-        ch.Move(finalVelocity * Time.deltaTime);
     }
 
-    private IEnumerator PerformDash(Vector3 moveDirection)
+    private IEnumerator PerformDash()
     {
         canDash = false;
-        isDashing = true;
-        verticalVelocity.y = 0f;
+        IsDashing = true;
+        verticalVelocity = Vector3.zero;
 
-        if (moveDirection.sqrMagnitude == 0 || z > 0)
-        {
-            if (cameraTransform != null)
-            {
-                moveDirection = cameraTransform.forward; 
-            }
-            else
-            {
-                moveDirection = transform.forward;
-            }
-        }
+        var x = Input.GetAxisRaw("Horizontal");
+        var z = Input.GetAxisRaw("Vertical");
+
+        Vector3 dashDir;
+
+        if (x == 0 && z >= 0)
+            dashDir = cameraTransform != null ? cameraTransform.forward : transform.forward;
+        else
+            dashDir = CurrentMoveInput;
+
+        if (dashDir.sqrMagnitude < 0.01f)
+            dashDir = cameraTransform != null ? cameraTransform.forward : transform.forward;
+
+        dashDir.Normalize();
 
         var startTime = Time.time;
         while (Time.time < startTime + dashTime)
         {
-            ch.Move(moveDirection * dashSpeed * Time.deltaTime);
+            ch.Move(dashDir * dashSpeed * Time.deltaTime);
             yield return null;
         }
 
-        isDashing = false;
+        horizontalVelocity = dashDir * (dashSpeed * 0.7f);
+
+        IsDashing = false;
 
         yield return new WaitForSeconds(dashCooldown);
         canDash = true;
