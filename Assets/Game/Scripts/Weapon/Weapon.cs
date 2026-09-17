@@ -8,42 +8,48 @@ public class Weapon : BaseMonoBehaviour
     [SerializeField] protected Animator animator;
     [SerializeField] protected Billboard billboard;
     [SerializeField] protected AudioSource audioSource;
-    
-    [Header("SFX")]
-    [SerializeField] protected AudioClip clipShoot;
-    [SerializeField] protected AudioClip clipReload;
-    
-    private static readonly int IsHeldHash = Animator.StringToHash("IsHeld");
-    private static readonly int ShootHash = Animator.StringToHash("Shoot");
 
-    private int currentAmmo;
+    [Header("SFX")] [SerializeField] protected AudioClip clipShoot;
+    [SerializeField] protected AudioClip clipReload;
+
+    private static readonly int IsHeldHash = Animator.StringToHash("IsHeld");
+
+    protected int currentAmmo;
     private int reserveAmmo;
     private int magazineSize;
 
-    private Camera playerCamera;
-    private Collider weaponCollider;
-    private Rigidbody weaponRigidBody;
+    protected Camera playerCamera;
+    protected Collider weaponCollider;
+    protected Rigidbody weaponRigidBody;
 
-    private bool isHeld;
+    protected bool isHeld;
     private bool isReloading;
     private bool canShoot = true;
 
-    public WeaponType WeaponType => weaponData != null ? weaponData.WeaponType : default;
+    public event Action OnGetingWeapon;
+
+    public WeaponType WeaponType => weaponData != null
+        ? weaponData.WeaponType
+        : default;
+
     public event Action<int, int, int, bool> AmmoChanged;
 
-    private void Awake()
+    protected virtual void Awake()
     {
         playerCamera = Camera.main;
         weaponCollider = GetComponent<Collider>();
         weaponRigidBody = GetComponent<Rigidbody>();
-        if (audioSource == null) audioSource = GetComponent<AudioSource>();
-        
-        if (!ValidateReference(weaponData, nameof(weaponData)) || !ValidateReference(animator, nameof(animator)) || 
-            !ValidateReference(playerCamera, nameof(playerCamera)) 
-            || !ValidateReference(weaponRigidBody, nameof(weaponRigidBody))
-            || !ValidateReference(weaponCollider, nameof(weaponCollider))
-            || !ValidateReference(billboard, nameof(billboard))
-            || !ValidateReference(audioSource, nameof(audioSource)))
+
+        if (audioSource == null)
+            audioSource = GetComponent<AudioSource>();
+
+        if (!ValidateReference(weaponData, nameof(weaponData)) ||
+            !ValidateReference(animator, nameof(animator)) ||
+            !ValidateReference(playerCamera, nameof(playerCamera)) ||
+            !ValidateReference(weaponRigidBody, nameof(weaponRigidBody)) ||
+            !ValidateReference(weaponCollider, nameof(weaponCollider)) ||
+            !ValidateReference(billboard, nameof(billboard)) ||
+            !ValidateReference(audioSource, nameof(audioSource)))
             return;
 
         currentAmmo = weaponData.StartingAmmo;
@@ -52,29 +58,49 @@ public class Weapon : BaseMonoBehaviour
 
     public virtual void OnShoot()
     {
-        if (isReloading || !isHeld || !canShoot || playerCamera == null) return;
+        if (!CanShoot())
+            return;
+
         if (currentAmmo <= 0)
         {
             OnReload();
             return;
-        } 
-
-        canShoot = false;
-        currentAmmo--;
-        if (audioSource != null) audioSource.PlayOneShot(clipShoot);
-
-        NotifyAmmoChanged();
-        animator.SetTrigger(ShootHash);
-
-        var ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-
-        if (Physics.Raycast(ray, out var hit, weaponData.ShootRange, weaponData.Mask))
-        {
-            if (hit.collider.TryGetComponent<IDamagable>(out var damagable))
-                damagable.TakeDamage(weaponData.Damage);
         }
 
+        Shoot();
+    }
+
+    protected virtual void Shoot()
+    {
+        canShoot = false;
+        currentAmmo--;
+
+        if (audioSource != null)
+            audioSource.PlayOneShot(clipShoot);
+
+        NotifyAmmoChanged();
+
+        var ray = playerCamera.ViewportPointToRay(
+            new Vector3(0.5f, 0.5f, 0f)
+        );
+
+        if (Physics.Raycast(
+                ray,
+                out var hit,
+                weaponData.ShootRange,
+                weaponData.Mask))
+            if (hit.collider.TryGetComponent<IDamagable>(out var damagable))
+                damagable.TakeDamage(weaponData.Damage);
+
         StartCoroutine(ShootCooldown());
+    }
+
+    protected bool CanShoot()
+    {
+        return !isReloading &&
+               isHeld &&
+               canShoot &&
+               playerCamera != null;
     }
 
     private IEnumerator ShootCooldown()
@@ -85,7 +111,10 @@ public class Weapon : BaseMonoBehaviour
 
     public void OnReload()
     {
-        if (currentAmmo >= weaponData.MagazineSize || reserveAmmo <= 0 || isReloading || !isHeld)
+        if (currentAmmo >= weaponData.MagazineSize ||
+            reserveAmmo <= 0 ||
+            isReloading ||
+            !isHeld)
             return;
 
         StartCoroutine(Reloading());
@@ -94,7 +123,10 @@ public class Weapon : BaseMonoBehaviour
     private IEnumerator Reloading()
     {
         isReloading = true;
-        if (audioSource != null) audioSource.PlayOneShot(clipReload);
+
+        if (audioSource != null)
+            audioSource.PlayOneShot(clipReload);
+
         NotifyAmmoChanged();
 
         yield return new WaitForSeconds(weaponData.ReloadTime);
@@ -106,6 +138,7 @@ public class Weapon : BaseMonoBehaviour
         reserveAmmo -= ammoToReload;
 
         isReloading = false;
+
         NotifyAmmoChanged();
     }
 
@@ -117,29 +150,39 @@ public class Weapon : BaseMonoBehaviour
 
     public void OnGetWeapon(Transform weaponHolder)
     {
-        if (weaponRigidBody == null || weaponCollider == null || billboard == null) return;
+        if (weaponRigidBody == null ||
+            weaponCollider == null ||
+            billboard == null)
+            return;
 
         isHeld = true;
-        
+
+        OnGetingWeapon?.Invoke();
+
         transform.SetParent(weaponHolder);
         transform.localPosition = Vector3.zero;
         transform.localRotation = Quaternion.identity;
 
         weaponRigidBody.isKinematic = true;
         weaponCollider.enabled = false;
-        
+
         billboard.ResetPosition();
         billboard.enabled = false;
 
         animator.SetBool(IsHeldHash, true);
+
         NotifyAmmoChanged();
     }
 
     public void OnDropWeapon()
     {
-        if (weaponRigidBody == null || weaponCollider == null || billboard == null) return;
+        if (weaponRigidBody == null ||
+            weaponCollider == null ||
+            billboard == null)
+            return;
 
         StopAllCoroutines();
+
         isReloading = false;
         canShoot = true;
         isHeld = false;
@@ -153,11 +196,19 @@ public class Weapon : BaseMonoBehaviour
         billboard.enabled = true;
 
         if (playerCamera != null)
-            weaponRigidBody.AddForce(playerCamera.transform.forward * weaponData.ThrowForce, ForceMode.Impulse);
+            weaponRigidBody.AddForce(
+                playerCamera.transform.forward * weaponData.ThrowForce,
+                ForceMode.Impulse
+            );
     }
 
-    private void NotifyAmmoChanged()
+    protected void NotifyAmmoChanged()
     {
-        AmmoChanged?.Invoke(currentAmmo, magazineSize, reserveAmmo, isReloading);
+        AmmoChanged?.Invoke(
+            currentAmmo,
+            magazineSize,
+            reserveAmmo,
+            isReloading
+        );
     }
 }

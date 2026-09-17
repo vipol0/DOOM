@@ -1,11 +1,16 @@
-﻿public class AkimboGun : Weapon
+﻿using UnityEngine;
+
+public class AkimboGun : Weapon
 {
+    private static readonly int ShootVariantHash = Animator.StringToHash("ShootVariant");
+    private static readonly int ShootTriggerHash = Animator.StringToHash("Shoot");
     private int shootVariant = 1;
 
     public override void OnShoot()
     {
         base.OnShoot();
-        animator.SetInteger("ShootVariant", shootVariant);
+        animator.SetInteger(ShootVariantHash, shootVariant);
+        animator.SetTrigger(ShootTriggerHash);
 
         switch (shootVariant)
         {

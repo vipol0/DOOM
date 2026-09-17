@@ -11,11 +11,22 @@ public class PlayerWeaponSystem : MonoBehaviour
         public int amount;
     }
 
-    [Header("Inventory Settings")] [SerializeField]
-    private List<AmmoSlot> initialAmmoList = new();
+    [Serializable]
+    public struct WeaponOffset
+    {
+        public WeaponType weaponType;
+        public Vector3 positionOffset;
+    }
 
-    [Header("Weapon System Setup")] [SerializeField]
-    private LayerMask pickupMask;
+    [Header("Inventory Settings")]
+    [SerializeField] private List<AmmoSlot> initialAmmoList = new();
+
+    [Header("Weapon Offsets")]
+    [SerializeField] private Vector3 defaultWeaponOffset;
+    [SerializeField] private List<WeaponOffset> weaponOffsets = new();
+
+    [Header("Weapon System Setup")]
+    [SerializeField] private LayerMask pickupMask;
 
     [SerializeField] private LayerMask weaponMask;
     [SerializeField] private LayerMask handMask;
@@ -25,11 +36,17 @@ public class PlayerWeaponSystem : MonoBehaviour
     [SerializeField] private Transform weaponHolder;
 
     private readonly Dictionary<WeaponType, int> ammoInventory = new();
+    private readonly Dictionary<WeaponType, Vector3> weaponOffsetDictionary = new();
+
     private Weapon currentWeapon;
 
     private void Awake()
     {
-        foreach (var slot in initialAmmoList) ammoInventory[slot.ammoType] = slot.amount;
+        foreach (var slot in initialAmmoList)
+            ammoInventory[slot.ammoType] = slot.amount;
+
+        foreach (var offset in weaponOffsets)
+            weaponOffsetDictionary[offset.weaponType] = offset.positionOffset;
     }
 
     private void Start()
@@ -39,7 +56,8 @@ public class PlayerWeaponSystem : MonoBehaviour
 
     private void OnDisable()
     {
-        if (currentWeapon != null) currentWeapon.AmmoChanged -= AmmoChanged;
+        if (currentWeapon != null)
+            currentWeapon.AmmoChanged -= AmmoChanged;
     }
 
     private void Update()
@@ -65,44 +83,87 @@ public class PlayerWeaponSystem : MonoBehaviour
         var newAmount = GetAmmo(type) + amount;
         SetAmmo(type, newAmount);
 
-        if (currentWeapon != null && currentWeapon.WeaponType == type) currentWeapon.GetAmmo(newAmount);
+        if (currentWeapon != null && currentWeapon.WeaponType == type)
+            currentWeapon.GetAmmo(newAmount);
     }
 
     private void OnRaycast()
     {
-        var ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+        var ray = playerCamera.ViewportPointToRay(
+            new Vector3(0.5f, 0.5f, 0f)
+        );
 
         if (Physics.Raycast(ray, out var hit, pickupRange, pickupMask))
+        {
             if (hit.collider.gameObject.CompareTag("Weapon"))
             {
                 var newWeapon = hit.collider.gameObject.GetComponent<Weapon>();
-                if (currentWeapon == newWeapon) return;
 
-                if (currentWeapon != null) OnDropWeapon();
+                if (currentWeapon == newWeapon)
+                    return;
+
+                if (currentWeapon != null)
+                    OnDropWeapon();
+
                 OnGetWeapon(newWeapon);
             }
+        }
     }
 
     private void OnGetWeapon(Weapon newWeapon)
     {
-        if (newWeapon == null) return;
+        if (newWeapon == null)
+            return;
 
         currentWeapon = newWeapon;
-        SetLayerRecursively(currentWeapon.gameObject, GetLayerIndex(handMask));
+
+        SetLayerRecursively(
+            currentWeapon.gameObject,
+            GetLayerIndex(handMask)
+        );
 
         ammoText.gameObject.SetActive(true);
+
         currentWeapon.AmmoChanged += AmmoChanged;
 
         var reserve = GetAmmo(currentWeapon.WeaponType);
         currentWeapon.GetAmmo(reserve);
+
         currentWeapon.OnGetWeapon(weaponHolder);
+
+        ApplyWeaponOffset();
+    }
+
+    private void ApplyWeaponOffset()
+    {
+        if (currentWeapon == null)
+            return;
+
+        var weaponTransform = currentWeapon.transform;
+        
+        weaponTransform.localPosition = Vector3.zero;
+        
+        if (weaponOffsetDictionary.TryGetValue(
+                currentWeapon.WeaponType,
+                out var offset))
+        {
+            weaponTransform.localPosition = offset;
+        }
+        else
+        {
+            weaponTransform.localPosition = defaultWeaponOffset;
+        }
     }
 
     private void OnDropWeapon()
     {
         if (currentWeapon != null)
         {
-            SetLayerRecursively(currentWeapon.gameObject, GetLayerIndex(weaponMask));
+            SetLayerRecursively(
+                currentWeapon.gameObject,
+                GetLayerIndex(weaponMask)
+            );
+
             currentWeapon.OnDropWeapon();
             currentWeapon.AmmoChanged -= AmmoChanged;
         }
@@ -113,21 +174,36 @@ public class PlayerWeaponSystem : MonoBehaviour
 
     private void OnShoot()
     {
-        if (currentWeapon != null) currentWeapon.OnShoot();
+        if (currentWeapon != null)
+            currentWeapon.OnShoot();
     }
 
     private void OnReload()
     {
-        if (currentWeapon != null) currentWeapon.OnReload();
+        if (currentWeapon != null)
+            currentWeapon.OnReload();
     }
 
-    private void AmmoChanged(int currentAmmo, int maxAmmo, int reserveAmmo, bool isReload)
+    private void AmmoChanged(
+        int currentAmmo,
+        int maxAmmo,
+        int reserveAmmo,
+        bool isReload)
     {
-        if (ammoText == null || currentWeapon == null) return;
+        if (ammoText == null || currentWeapon == null)
+            return;
 
-        // Сохраняем изменившийся запас для текущего типа патронов
-        SetAmmo(currentWeapon.WeaponType, reserveAmmo);
-        ammoText.UpdateText(currentAmmo, maxAmmo, reserveAmmo, isReload);
+        SetAmmo(
+            currentWeapon.WeaponType,
+            reserveAmmo
+        );
+
+        ammoText.UpdateText(
+            currentAmmo,
+            maxAmmo,
+            reserveAmmo,
+            isReload
+        );
     }
 
     private int GetLayerIndex(LayerMask mask)
@@ -135,11 +211,16 @@ public class PlayerWeaponSystem : MonoBehaviour
         return Mathf.RoundToInt(Mathf.Log(mask.value, 2));
     }
 
-    private void SetLayerRecursively(GameObject target, int layerIndex)
+    private void SetLayerRecursively(
+        GameObject target,
+        int layerIndex)
     {
-        if (target == null) return;
+        if (target == null)
+            return;
 
         target.layer = layerIndex;
-        foreach (Transform child in target.transform) SetLayerRecursively(child.gameObject, layerIndex);
+
+        foreach (Transform child in target.transform)
+            SetLayerRecursively(child.gameObject, layerIndex);
     }
 }

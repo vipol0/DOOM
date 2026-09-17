@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
-public class WaveManager : MonoBehaviour
+public class WaveManager : BaseMonoBehaviour
 {
     [Serializable]
     private struct Wave
@@ -16,6 +16,7 @@ public class WaveManager : MonoBehaviour
 
     [SerializeField] private EnemySpawn[] spawns;
     [SerializeField] private List<Wave> waves;
+    [SerializeField] private Weapon weapon;
 
     [Header("Spawn Settings")] [SerializeField]
     private float spawnCooldown = 2f;
@@ -45,8 +46,19 @@ public class WaveManager : MonoBehaviour
     public event Action OnBreakStarted;
     public event Action<float> OnBreakTimeChanged;
 
-    private void Start()
+    private void OnEnable()
     {
+        if (ValidateReference(weapon, nameof(weapon))) weapon.OnGetingWeapon += StartWave;
+    }
+
+    private void OnDisable()
+    {
+        if (ValidateReference(weapon, nameof(weapon))) weapon.OnGetingWeapon -= StartWave;
+    }
+
+    private void StartWave()
+    {
+        if (CurrentWaveIndex >= 0) return;
         StartNextWave();
     }
 
