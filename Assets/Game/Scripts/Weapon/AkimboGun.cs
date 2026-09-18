@@ -10,7 +10,6 @@ public class AkimboGun : Weapon
     {
         base.OnShoot();
         animator.SetInteger(ShootVariantHash, shootVariant);
-        animator.SetTrigger(ShootTriggerHash);
 
         switch (shootVariant)
         {

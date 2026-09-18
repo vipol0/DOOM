@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 52c39aea525042519e797508704a844a, type: 3}
   m_Name: ARGUN
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
-  damage: 10
-  magazineSize: 30
-  startingAmmo: 30
-  shootRange: 25
-  shootCooldown: 0.1
+  damage: 13
+  magazineSize: 45
+  startingAmmo: 45
+  shootRange: 50
+  shootCooldown: 0.085
   throwForce: 25
   reloadTime: 2.5
   mask:

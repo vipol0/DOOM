@@ -22,7 +22,9 @@ public class WaveManager : BaseMonoBehaviour
     private float spawnCooldown = 2f;
 
     [SerializeField] private float minSpawnCooldown = 0.2f;
+
     [SerializeField] private int cooldownDecreaseEveryNWaves = 3;
+
     [SerializeField] private float cooldownDecreaseAmount = 0.2f;
 
     [Header("Wave Settings")] [SerializeField]
@@ -30,10 +32,15 @@ public class WaveManager : BaseMonoBehaviour
 
     [Header("Debug")] [SerializeField] private bool isDebug;
 
-    public int CurrentWaveIndex { get; set; } = -1;
+    public int CurrentWaveIndex { get; private set; } = -1;
+
+    public int WaveCount => waves.Count;
+
+    public bool IsWaveActive { get; private set; }
+
+    public bool IsBreakActive => breakCoroutine != null;
 
     private int enemiesAlive;
-    private bool isWaveActive;
 
     private Coroutine waveCoroutine;
     private Coroutine spawnCoroutine;
@@ -43,6 +50,7 @@ public class WaveManager : BaseMonoBehaviour
 
     public event Action<int> OnWaveStarted;
     public event Action<float> OnWaveTimeChanged;
+
     public event Action OnBreakStarted;
     public event Action<float> OnBreakTimeChanged;
 
@@ -59,22 +67,25 @@ public class WaveManager : BaseMonoBehaviour
     private void StartWave()
     {
         if (CurrentWaveIndex >= 0) return;
+
         StartNextWave();
     }
 
-    public void StartNextWave()
+    public void StartWave(int waveIndex)
     {
-        CurrentWaveIndex++;
-
-        if (CurrentWaveIndex >= waves.Count)
+        if (!IsValidWaveIndex(waveIndex))
         {
-            if (isDebug) Debug.Log($"[{gameObject.name}] All waves completed!");
+            if (isDebug)
+                Debug.LogWarning($"[{gameObject.name}] " + $"Invalid wave index: {waveIndex}. " +
+                                 $"Available waves: {WaveCount}.");
 
             return;
         }
 
-        activeEnemies.Clear();
-        isWaveActive = true;
+        StopCurrentState();
+
+        CurrentWaveIndex = waveIndex;
+        IsWaveActive = true;
 
         var currentSpawnCooldown = GetCurrentSpawnCooldown();
 
@@ -83,8 +94,76 @@ public class WaveManager : BaseMonoBehaviour
         waveCoroutine = StartCoroutine(WaveRoutine());
 
         if (isDebug)
-            Debug.Log($"[{gameObject.name}] " + $"Wave {CurrentWaveIndex + 1} started." +
+            Debug.Log($"[{gameObject.name}] " + $"Wave {CurrentWaveIndex + 1} started. " +
                       $"Spawn cooldown: {currentSpawnCooldown:F2} sec.");
+    }
+
+    public void StartNextWave()
+    {
+        var nextWaveIndex = CurrentWaveIndex + 1;
+
+        if (!IsValidWaveIndex(nextWaveIndex))
+        {
+            if (isDebug)
+                Debug.Log($"[{gameObject.name}] All waves completed!");
+
+            return;
+        }
+
+        StartWave(nextWaveIndex);
+    }
+
+    public void StartPreviousWave()
+    {
+        var previousWaveIndex = CurrentWaveIndex - 1;
+
+        if (!IsValidWaveIndex(previousWaveIndex))
+        {
+            if (isDebug) Debug.LogWarning($"[{gameObject.name}] " + "Previous wave does not exist.");
+
+            return;
+        }
+
+        StartWave(previousWaveIndex);
+    }
+
+    public void RestartCurrentWave()
+    {
+        if (!IsValidWaveIndex(CurrentWaveIndex))
+        {
+            if (isDebug) Debug.LogWarning($"[{gameObject.name}] " + "Cannot restart wave. No current wave.");
+
+            return;
+        }
+
+        StartWave(CurrentWaveIndex);
+    }
+
+    public void StartBreak()
+    {
+        if (CurrentWaveIndex < 0)
+        {
+            if (isDebug) Debug.LogWarning($"[{gameObject.name}] " + "Cannot start break. No current wave.");
+
+            return;
+        }
+
+        StopCurrentState();
+
+        breakCoroutine = StartCoroutine(BreakRoutine());
+    }
+
+    public void SkipBreak()
+    {
+        if (breakCoroutine == null) return;
+
+        StopCoroutine(breakCoroutine);
+
+        breakCoroutine = null;
+
+        OnBreakTimeChanged?.Invoke(0f);
+
+        StartNextWave();
     }
 
     private IEnumerator WaveRoutine()
@@ -93,13 +172,11 @@ public class WaveManager : BaseMonoBehaviour
 
         enemiesAlive = currentWave.prefabCount;
 
-        spawnCoroutine = StartCoroutine(
-            SpawnEnemies(currentWave)
-        );
+        spawnCoroutine = StartCoroutine(SpawnEnemies(currentWave));
 
-        yield return StartCoroutine(
-            WaveTimer(currentWave.waveTime)
-        );
+        yield return StartCoroutine(WaveTimer(currentWave.waveTime));
+
+        if (!IsWaveActive) yield break;
 
         DestroyRemainingEnemies();
 
@@ -112,7 +189,7 @@ public class WaveManager : BaseMonoBehaviour
 
         for (var i = 0; i < wave.prefabCount; i++)
         {
-            if (!isWaveActive) yield break;
+            if (!IsWaveActive) yield break;
 
             if (spawns != null && spawns.Length > 0 && wave.prefabs != null && wave.prefabs.Length > 0)
             {
@@ -142,7 +219,7 @@ public class WaveManager : BaseMonoBehaviour
 
         OnWaveTimeChanged?.Invoke(1f);
 
-        while (remainingTime > 0f && isWaveActive)
+        while (remainingTime > 0f && IsWaveActive)
         {
             var progress = remainingTime / waveTime;
 
@@ -171,8 +248,7 @@ public class WaveManager : BaseMonoBehaviour
     {
         if (spawns == null || spawns.Length == 0) return null;
 
-        var randomIndex =
-            Random.Range(0, spawns.Length);
+        var randomIndex = Random.Range(0, spawns.Length);
 
         return spawns[randomIndex];
     }
@@ -186,11 +262,24 @@ public class WaveManager : BaseMonoBehaviour
         activeEnemies.Clear();
     }
 
+    public void EnemyKilled(GameObject enemy)
+    {
+        if (enemy == null) return;
+
+        if (!activeEnemies.Contains(enemy)) return;
+
+        activeEnemies.Remove(enemy);
+
+        enemiesAlive--;
+
+        if (enemiesAlive <= 0 && IsWaveActive) EndWave();
+    }
+
     private void EndWave()
     {
-        if (!isWaveActive) return;
+        if (!IsWaveActive) return;
 
-        isWaveActive = false;
+        IsWaveActive = false;
 
         if (waveCoroutine != null)
         {
@@ -208,7 +297,8 @@ public class WaveManager : BaseMonoBehaviour
 
         if (CurrentWaveIndex + 1 < waves.Count)
         {
-            breakCoroutine = StartCoroutine(BreakRoutine());
+            breakCoroutine =
+                StartCoroutine(BreakRoutine());
         }
         else
         {
@@ -218,11 +308,22 @@ public class WaveManager : BaseMonoBehaviour
 
     private IEnumerator BreakRoutine()
     {
-        if (isDebug) Debug.Log($"[{gameObject.name}] " + "Break between waves: " + $"{breakTime} sec.");
+        if (isDebug) Debug.Log($"[{gameObject.name}] " + $"Break between waves: {breakTime} sec.");
 
         OnBreakStarted?.Invoke();
 
         var remainingTime = breakTime;
+
+        if (breakTime <= 0f)
+        {
+            OnBreakTimeChanged?.Invoke(0f);
+
+            breakCoroutine = null;
+
+            StartNextWave();
+
+            yield break;
+        }
 
         while (remainingTime > 0f)
         {
@@ -242,16 +343,33 @@ public class WaveManager : BaseMonoBehaviour
         StartNextWave();
     }
 
-    public void EnemyKilled(GameObject enemy)
+    private void StopCurrentState()
     {
-        if (enemy == null) return;
+        IsWaveActive = false;
 
-        if (!activeEnemies.Contains(enemy)) return;
+        if (waveCoroutine != null)
+        {
+            StopCoroutine(waveCoroutine);
+            waveCoroutine = null;
+        }
 
-        activeEnemies.Remove(enemy);
+        if (spawnCoroutine != null)
+        {
+            StopCoroutine(spawnCoroutine);
+            spawnCoroutine = null;
+        }
 
-        enemiesAlive--;
+        if (breakCoroutine != null)
+        {
+            StopCoroutine(breakCoroutine);
+            breakCoroutine = null;
+        }
 
-        if (enemiesAlive <= 0 && isWaveActive) EndWave();
+        DestroyRemainingEnemies();
+    }
+
+    private bool IsValidWaveIndex(int waveIndex)
+    {
+        return waveIndex >= 0 && waveIndex < waves.Count;
     }
 }

@@ -15,7 +15,7 @@ MonoBehaviour:
   damage: 15
   magazineSize: 15
   startingAmmo: 15
-  shootRange: 25
+  shootRange: 50
   shootCooldown: 0.1
   throwForce: 25
   reloadTime: 2.5
